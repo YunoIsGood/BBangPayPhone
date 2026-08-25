@@ -1,36 +1,13 @@
 using UnityEngine;
 using PrimeTween;
 
-[DisallowMultipleComponent]
-[RequireComponent(typeof(Collider))]
-public sealed class InspectableObject : MonoBehaviour, IInteractable
+public sealed class InspectableObject : MonoBehaviour, IInspectable
 {
-    [field: Header("Inspect Settings")]
-    [field: SerializeField, Tooltip("관찰 시 모델링 방향 보정 값")]
-    public Vector3 InspectRotationOffset { get; private set; } = Vector3.zero;
-
-    public Vector3 OriginalPos { get; private set; }
-    public Quaternion OriginalRot { get; private set; }
-    public Collider MainCollider { get; private set; }
+    [field: SerializeField] public Vector3 InspectRotationOffset { get; private set; }
+    public Transform ObjectTransform => transform;
     
-    public bool CanInteract => !InspectManager.IsInspecting;
+    // Focused(줌인) 상태에서만 물건을 집어들 수 있음
+    public bool CanInteract => InteractionStateManager.Instance.CurrentState == GameState.Focused;
 
-    private void Awake()
-    {
-        MainCollider = GetComponent<Collider>();
-        OriginalPos = transform.position;
-        OriginalRot = transform.rotation;
-    }
-
-    public void Interact()
-    {
-        if (!CanInteract) return;
-        InspectManager.Instance?.StartInspect(this);
-    }
-
-    public void ResetObject(float duration = 0.3f)
-    {
-        Tween.Position(transform, OriginalPos, duration, Ease.OutQuad);
-        Tween.Rotation(transform, OriginalRot, duration, Ease.OutQuad);
-    }
+    public void Interact() => InspectViewer.Instance.StartInspect(this);
 }

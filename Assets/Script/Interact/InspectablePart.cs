@@ -1,17 +1,17 @@
 using UnityEngine;
 using UnityEngine.Events;
 
-[DisallowMultipleComponent]
 public sealed class InspectablePart : MonoBehaviour, IInteractable
 {
-    [Header("Interaction Settings")]
     [SerializeField] private UnityEvent onInteractEvent;
 
-    public bool CanInteract => InspectManager.IsInspecting;
+    // 줌인 상태이거나, 360도 관찰 중일 때만 클릭 가능
+    public bool CanInteract => 
+        InteractionStateManager.Instance.CurrentState == GameState.Focused || 
+        InteractionStateManager.Instance.CurrentState == GameState.Inspect;
 
     public void Interact()
     {
-        if (!CanInteract) return;
-        onInteractEvent?.Invoke(); 
+        if (CanInteract) onInteractEvent?.Invoke();
     }
 }
