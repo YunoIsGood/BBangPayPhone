@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using PrimeTween;
-using System;
 
 [DisallowMultipleComponent]
 public sealed class CameraController : MonoBehaviour
@@ -25,16 +24,24 @@ public sealed class CameraController : MonoBehaviour
 
     private InputAction _lookAction;
     private InputAction _cancelAction;
+    private Sequence _cameraSequence;
 
     private void Awake()
     {
         Instance = this;
+        Cursor.lockState = CursorLockMode.Locked;
         _fpsOriginPos = cameraTransform.position;
         _fpsOriginRot = cameraTransform.rotation;
-        _yRotation = cameraTransform.eulerAngles.y;
+        
+        SyncRotationVariables();
 
         _lookAction = new InputAction(type: InputActionType.Value, binding: "<Mouse>/delta");
         _cancelAction = new InputAction(type: InputActionType.Button, binding: "<Mouse>/rightButton");
+    }
+
+    public void DebugSystem()
+    {
+        Debug.Log("상호작용됨!");   
     }
 
     private void OnEnable()
@@ -48,50 +55,72 @@ public sealed class CameraController : MonoBehaviour
     {
         _lookAction.Disable();
         _cancelAction.Disable();
+        if (_cameraSequence.isAlive) _cameraSequence.Stop();
     }
 
     private void LateUpdate()
     {
-        // FPS 상태일 때만 마우스로 고개를 돌릴 수 있음
-        if (InteractionStateManager.Instance.CurrentState != GameState.FPS) return;
+        if (InteractionStateManager.Instance.CurrentState != GameState.FPS || _cameraSequence.isAlive) return;
 
         Vector2 lookInput = _lookAction.ReadValue<Vector2>();
-        if (lookInput.sqrMagnitude < 0.001f) return;
+        if (lookInput.sqrMagnitude < 0.01f || lookInput.sqrMagnitude > 10000f) return;
 
         _xRotation = Mathf.Clamp(_xRotation - (lookInput.y * lookSensitivity), minPitch, maxPitch);
         _yRotation += lookInput.x * lookSensitivity;
 
         cameraTransform.rotation = Quaternion.Euler(_xRotation, _yRotation, 0f);
-        _fpsOriginRot = cameraTransform.rotation; // 마지막으로 바라본 방향 저장
     }
 
-    // 특정 구역(FocusZone)을 클릭했을 때 카메라 이동
     public void MoveToZone(Transform targetViewPoint)
     {
+        if (_cameraSequence.isAlive) return;
+
+        _fpsOriginPos = cameraTransform.position;
+        _fpsOriginRot = cameraTransform.rotation;
+
         InteractionStateManager.Instance.ChangeState(GameState.Focused);
         
-        Sequence.Create()
+        _cameraSequence = Sequence.Create()
             .Group(Tween.Position(cameraTransform, targetViewPoint.position, moveDuration, Ease.InOutSine))
             .Group(Tween.Rotation(cameraTransform, targetViewPoint.rotation, moveDuration, Ease.InOutSine));
     }
 
-    // 우클릭(Cancel) 시 이전 상태로 복귀
     private void OnCancelPerformed(InputAction.CallbackContext ctx)
     {
+        // 🚨 핵심 수정: 카메라가 이동 중이거나, 물체가 날아가고 있는 중에는 우클릭 완전 무시! (더블 트리거 방지)
+        if (_cameraSequence.isAlive) return;
+        if (InspectViewer.Instance != null && InspectViewer.Instance.IsTransitioning) return;
+
         var currentState = InteractionStateManager.Instance.CurrentState;
 
+        // 1. FocusZone(줌인) 상태에서 우클릭 -> FPS(기본 1인칭) 상태로 복귀
         if (currentState == GameState.Focused)
         {
-            // 줌인 상태에서 우클릭 -> FPS 기본 위치로 복귀
-            InteractionStateManager.Instance.ChangeState(GameState.FPS);
-            Sequence.Create()
+            _cameraSequence = Sequence.Create()
                 .Group(Tween.Position(cameraTransform, _fpsOriginPos, moveDuration, Ease.InOutSine))
-                .Group(Tween.Rotation(cameraTransform, _fpsOriginRot, moveDuration, Ease.InOutSine));
+                .Group(Tween.Rotation(cameraTransform, _fpsOriginRot, moveDuration, Ease.InOutSine))
+                .OnComplete(() => 
+                {
+                    SyncRotationVariables();
+                    InteractionStateManager.Instance.ChangeState(GameState.FPS);
+                });
         }
+        // 2. Inspect(360도 관찰) 상태에서 우클릭 -> 뷰어에게 물건을 내려놓으라고 지시 (카메라는 움직이지 않음)
         else if (currentState == GameState.Inspect)
         {
-            // 360도 관찰 중 우클릭 -> 물건 내려놓기 (InspectViewer에서 처리)
-            InspectViewer.Instance.StopInspect();
+            if (InspectViewer.Instance != null)
+            {
+                InspectViewer.Instance.StopInspect();
+            }
         }
+    }
+
+    private void SyncRotationVariables()
+    {
+        Vector3 angles = cameraTransform.eulerAngles;
+        float normalizedX = angles.x > 180f ? angles.x - 360f : angles.x;
+        
+        _xRotation = Mathf.Clamp(normalizedX, minPitch, maxPitch);
+        _yRotation = angles.y;
     }
 }

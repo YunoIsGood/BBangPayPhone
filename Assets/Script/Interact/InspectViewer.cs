@@ -12,10 +12,12 @@ public sealed class InspectViewer : MonoBehaviour
     
     public IInspectable CurrentInspectable { get; private set; }
     public bool IsRotating { get; private set; }
+    
+    // 핵심 추가: 물체가 이동(트윈) 중인지 여부를 반환
+    public bool IsTransitioning => _activeSequence.isAlive;
 
     [Header("References")]
-    [SerializeField, Tooltip("카메라 앞 관찰 포인트 빈 오브젝트")] 
-    private Transform inspectPoint;
+    [SerializeField] private Transform inspectPoint;
     [SerializeField] private Light inspectLight;
 
     [Header("Settings")]
@@ -34,18 +36,10 @@ public sealed class InspectViewer : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-        Instance = this;
+        if (Instance != null && Instance != this) Destroy(gameObject);
+        else Instance = this;
 
-        if (Camera.main is { } mainCam)
-        {
-            _cachedCamTransform = mainCam.transform;
-        }
-
+        if (Camera.main is { } mainCam) _cachedCamTransform = mainCam.transform;
         if (inspectLight) inspectLight.enabled = false;
 
         _rotateAction = new InputAction(type: InputActionType.Value, binding: "<Mouse>/delta");
@@ -56,7 +50,6 @@ public sealed class InspectViewer : MonoBehaviour
     {
         _rotateClickAction.started += OnRotateStarted;
         _rotateClickAction.canceled += OnRotateCanceled;
-        
         _rotateAction.Enable(); 
         _rotateClickAction.Enable();
     }
@@ -65,10 +58,8 @@ public sealed class InspectViewer : MonoBehaviour
     {
         _rotateClickAction.started -= OnRotateStarted;
         _rotateClickAction.canceled -= OnRotateCanceled;
-        
         _rotateAction.Disable(); 
         _rotateClickAction.Disable();
-        
         ResetToken();
     }
 
@@ -79,7 +70,6 @@ public sealed class InspectViewer : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
-    // 관찰(Inspect) 모드가 아닐 때는 IsRotating이 켜지지 않도록 차단
     private void OnRotateStarted(InputAction.CallbackContext ctx)
     {
         if (InteractionStateManager.Instance != null && 
@@ -89,10 +79,7 @@ public sealed class InspectViewer : MonoBehaviour
         }
     }
 
-    private void OnRotateCanceled(InputAction.CallbackContext ctx)
-    {
-        IsRotating = false;
-    }
+    private void OnRotateCanceled(InputAction.CallbackContext ctx) => IsRotating = false;
 
     private void Update()
     {
@@ -103,7 +90,8 @@ public sealed class InspectViewer : MonoBehaviour
             _cachedCamTransform == null) return;
 
         Vector2 mouseDelta = _rotateAction.ReadValue<Vector2>();
-        if (mouseDelta.sqrMagnitude > 0.01f)
+        
+        if (mouseDelta.sqrMagnitude > 0.01f && mouseDelta.sqrMagnitude < 5000f)
         {
             Transform targetT = CurrentInspectable.ObjectTransform;
             targetT.RotateAround(targetT.position, _cachedCamTransform.up, -mouseDelta.x * rotationSpeed);
@@ -113,13 +101,7 @@ public sealed class InspectViewer : MonoBehaviour
 
     public void StartInspect(IInspectable obj)
     {
-        if (InteractionStateManager.Instance.CurrentState == GameState.Inspect || obj == null) return;
-
-        if (inspectPoint == null)
-        {
-            Debug.LogError("[InspectViewer] 'inspectPoint'가 할당되지 않았습니다! 카메라 자식으로 빈 오브젝트를 생성해 할당하세요.");
-            return;
-        }
+        if (InteractionStateManager.Instance.CurrentState == GameState.Inspect || obj == null || inspectPoint == null) return;
 
         CurrentInspectable = obj;
         Transform targetT = obj.ObjectTransform;
@@ -132,22 +114,29 @@ public sealed class InspectViewer : MonoBehaviour
 
         ResetToken();
         Quaternion targetRot = inspectPoint.rotation * Quaternion.Euler(obj.InspectRotationOffset);
-        MoveObjectAsync(targetT, inspectPoint.position, targetRot, _cts.Token).Forget();
+        
+        // 이동 애니메이션 시작
+        _activeSequence = Sequence.Create()
+            .Group(Tween.Position(targetT, inspectPoint.position, moveDuration, Ease.InOutSine))
+            .Group(Tween.Rotation(targetT, targetRot, moveDuration, Ease.InOutSine));
     }
 
     public void StopInspect()
     {
         if (InteractionStateManager.Instance.CurrentState != GameState.Inspect || CurrentInspectable == null) return;
 
+        // 상태를 Focused(선반 줌인)로 되돌림
         InteractionStateManager.Instance.ChangeState(GameState.Focused);
         if (inspectLight) inspectLight.enabled = false;
 
         ResetToken();
         Transform targetT = CurrentInspectable.ObjectTransform;
 
-        MoveObjectAsync(targetT, _originalPos, _originalRot, _cts.Token)
-            .ContinueWith(() => CurrentInspectable = null)
-            .Forget();
+        // 물체가 제자리로 돌아가는 애니메이션 실행
+        _activeSequence = Sequence.Create()
+            .Group(Tween.Position(targetT, _originalPos, moveDuration, Ease.InOutSine))
+            .Group(Tween.Rotation(targetT, _originalRot, moveDuration, Ease.InOutSine))
+            .OnComplete(() => CurrentInspectable = null);
     }
 
     private void ResetToken()
@@ -156,18 +145,5 @@ public sealed class InspectViewer : MonoBehaviour
         _cts?.Cancel();
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
-    }
-
-    private async UniTask MoveObjectAsync(Transform target, Vector3 toPos, Quaternion toRot, CancellationToken token)
-    {
-        try
-        {
-            _activeSequence = Sequence.Create()
-                .Group(Tween.Position(target, toPos, moveDuration, Ease.InOutSine))
-                .Group(Tween.Rotation(target, toRot, moveDuration, Ease.InOutSine));
-
-            await _activeSequence;
-        }
-        catch (OperationCanceledException) { }
     }
 }
