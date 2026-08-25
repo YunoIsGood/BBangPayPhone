@@ -1,22 +1,24 @@
-using Unity.VisualScripting;
 using UnityEngine;
 
-public class CarMove : MonoBehaviour
+namespace Script
 {
-    [SerializeField] private int speed;
-
-    void OnEnable()
+    public class CarMove : MonoBehaviour
     {
-        speed = Random.Range(12, 17);
-    }
+        [SerializeField] private int speed;
 
-    private void Update()
-    {
-        transform.position += transform.forward * speed * Time.deltaTime;
-    }
+        void OnEnable()
+        {
+            speed = Random.Range(12, 17);
+        }
 
-    private void OnTriggerEnter(Collider other) 
-    {
-        transform.position = new Vector3(-15f, transform.position.y, transform.position.z);
+        private void Update()
+        {
+            transform.position += transform.forward * speed * Time.deltaTime;
+        }
+
+        private void OnTriggerEnter(Collider other) 
+        {
+            transform.position = new Vector3(-15f, transform.position.y, transform.position.z);
+        }
     }
 }

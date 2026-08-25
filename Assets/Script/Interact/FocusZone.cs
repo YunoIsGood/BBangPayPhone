@@ -1,3 +1,5 @@
+using Script;
+using Script.Interact;
 using UnityEngine;
 
 // FPS 모드에서 이 구역을 클릭하면 설정된 카메라 위치로 줌인됩니다.

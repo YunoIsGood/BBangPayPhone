@@ -4,6 +4,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using PrimeTween;
+using Script.Interact;
 
 [DisallowMultipleComponent]
 public sealed class InspectViewer : MonoBehaviour

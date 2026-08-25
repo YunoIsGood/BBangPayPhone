@@ -1,3 +1,4 @@
+using Script.Interact;
 using UnityEngine;
 
 [DisallowMultipleComponent]

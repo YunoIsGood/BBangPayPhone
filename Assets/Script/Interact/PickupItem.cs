@@ -1,5 +1,6 @@
 using UnityEngine;
 using PrimeTween;
+using Script.Interact;
 
 // 월드에서 클릭하면 360도 뷰 없이 즉시 인벤토리로 들어가는 아이템
 public sealed class PickupItem : MonoBehaviour, IPickupable

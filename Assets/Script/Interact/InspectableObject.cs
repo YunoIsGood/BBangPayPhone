@@ -1,5 +1,6 @@
 using UnityEngine;
 using PrimeTween;
+using Script.Interact;
 
 public sealed class InspectableObject : MonoBehaviour, IInspectable
 {
