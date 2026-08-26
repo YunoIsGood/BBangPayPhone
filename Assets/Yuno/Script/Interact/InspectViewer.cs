@@ -100,26 +100,23 @@ public sealed class InspectViewer : MonoBehaviour
         }
     }
 
-    public void StartInspect(IInspectable obj)
+    public void StartInspect(IInspectable target)
     {
-        if (InteractionStateManager.Instance.CurrentState == GameState.Inspect || obj == null || inspectPoint == null) return;
+        if (target == null || Camera.main == null) return;
 
-        CurrentInspectable = obj;
-        Transform targetT = obj.ObjectTransform;
+        CurrentInspectable = target;
+        Transform targetT = target.ObjectTransform;
 
-        _originalPos = targetT.position;
-        _originalRot = targetT.rotation;
+        // 🚨 핵심 수정: 메인 카메라 정면에서 target.InspectDistance 만큼 떨어진 위치로 정확히 밀착
+        Vector3 targetInspectPos = Camera.main.transform.position + (Camera.main.transform.forward * target.InspectDistance);
+        Quaternion targetInspectRot = Camera.main.transform.rotation * Quaternion.Euler(target.InspectRotationOffset);
 
+        // 상태 전환 및 위치 이동
         InteractionStateManager.Instance.ChangeState(GameState.Inspect);
-        if (inspectLight) inspectLight.enabled = true;
 
-        ResetToken();
-        Quaternion targetRot = inspectPoint.rotation * Quaternion.Euler(obj.InspectRotationOffset);
-        
-        // 이동 애니메이션 시작
-        _activeSequence = Sequence.Create()
-            .Group(Tween.Position(targetT, inspectPoint.position, moveDuration, Ease.InOutSine))
-            .Group(Tween.Rotation(targetT, targetRot, moveDuration, Ease.InOutSine));
+        Sequence.Create()
+            .Group(Tween.Position(targetT, targetInspectPos, 0.4f, Ease.OutQuad))
+            .Group(Tween.Rotation(targetT, targetInspectRot, 0.4f, Ease.OutQuad));
     }
 
     public void StopInspect()

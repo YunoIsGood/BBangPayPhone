@@ -1,7 +1,8 @@
 using UnityEngine;
 
-public interface IInspectable : IInteractable
+public interface IInspectable
 {
-    Vector3 InspectRotationOffset { get; }
     Transform ObjectTransform { get; }
+    Vector3 InspectRotationOffset { get; }
+    float InspectDistance { get; } // 🚨 추가: 카메라로부터의 거리
 }
